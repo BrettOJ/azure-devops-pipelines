@@ -1,0 +1,61 @@
+trigger:
+  branches:
+    include:
+      - main
+
+stages:
+  - stage: Terraform_Init_and_Plan
+    displayName: "Terraform Initialize and Plan"
+    jobs:
+      - job: TerraformInitPlan
+        displayName: "Run Terraform Init and Plan"
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+
+          - script: |
+              terraform init
+            displayName: 'Terraform Initialize'
+
+          - script: |
+              terraform plan -out=tfplan
+            displayName: 'Terraform Plan'
+            continueOnError: false
+
+  - stage: Manual_Approval
+    displayName: "Manual Approval"
+    dependsOn: Terraform_Init_and_Plan
+    jobs:
+      - job: ManualApproval
+        displayName: "Wait for Manual Approval"
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: ManualValidation@0
+            inputs:
+              notifyUsers: 'user@yourdomain.com'
+              instructions: 'Please review the Terraform plan and approve or reject the deployment.'
+              onTimeout: 'reject'
+              timeout: '0d 0h 30m'
+
+  - stage: Terraform_Apply
+    displayName: "Terraform Apply"
+    dependsOn: Manual_Approval
+    condition: succeeded()
+    jobs:
+      - job: TerraformApply
+        displayName: "Run Terraform Apply"
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+
+          - script: |
+              terraform apply tfplan
+            displayName: 'Terraform Apply'
+            continueOnError: false
